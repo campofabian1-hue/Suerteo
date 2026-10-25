@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Suerteo">
+<meta name="theme-icon" content="#035B36">
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Suerteo — Tu suerte empieza aquí y ahora</title>
@@ -1237,10 +1247,39 @@ $("#filtroRes").addEventListener("change",e=>{
 });
 $("#listaResultados").innerHTML=htmlResultados();
 
+const FIREBASE_CONFIG={apiKey:"AIzaSyDT22nrwIAUER23i3U6hvI8RYDW5Vp213Q",authDomain:"suerteo-c5a28.firebaseapp.com",projectId:"suerteo-c5a28",storageBucket:"suerteo-c5a28.firebasestorage.app",messagingSenderId:"88053203982",appId:"1:88053203982:web:67e92d3c2d0f1fc752a85f"};
+const ADMIN_EMAIL="campo.fabian1@gmail.com";
+async function iniciarFirebase(){
+  firebase.initializeApp(FIREBASE_CONFIG);
+  const fs=firebase.firestore(), auth=firebase.auth();
+  try{await auth.getRedirectResult()}catch(e){}
+  if(location.hash==="#admin"&&!(auth.currentUser&&auth.currentUser.email===ADMIN_EMAIL)){
+    await auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());return null;
+  }
+  const u=auth.currentUser||(await auth.signInAnonymously()).user;
+  const owner=!!(u&&u.email===ADMIN_EMAIL&&u.emailVerified);
+  const db={
+    doc:(p)=>{const r=fs.doc(p);return{
+      get:()=>r.get(),
+      set:(d)=>r.set(d),
+      update:(d)=>r.update(d),
+      acquire:()=>fs.runTransaction(async t=>{const s=await t.get(r);if(s.exists)return{acquired:false};t.set(r,{uid:null,reservando:true});return{acquired:true};})
+    }},
+    collection:(n)=>fs.collection(n)
+  };
+  const usuario={id:async()=>u.uid,me:async()=>({name:"Jugador"}),isOwner:()=>owner};
+  const descargas={save:async({filename,data})=>{
+    const blob=data instanceof Blob?data:new Blob([data],{type:"text/csv;charset=utf-8"});
+    const url=URL.createObjectURL(blob);const a=document.createElement("a");
+    a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);}};
+  return{db,usuario,descargas};
+}
 (async()=>{
-  db=await window.claude.use("db");
-  usuario=await window.claude.use("user");
-  descargas=await window.claude.use("downloads");
+  let F=null;
+  try{F=await iniciarFirebase()}catch(e){console.error(e)}
+  if(!F){pintarSesion();return}
+  db=F.db;usuario=F.usuario;descargas=F.descargas;
   if(usuario){esDueno=!!usuario.isOwner();uid=await usuario.id()}
   if(!db||!uid){pintarSesion();return}
 

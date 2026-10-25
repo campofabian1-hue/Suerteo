@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() {
+      return request.auth != null;
+    }
+    function esAdmin() {
+      return signed()
+        && request.auth.token.email == "campo.fabian1@gmail.com"
+        && request.auth.token.email_verified == true;
+    }
+
+    // Saldo y movimientos: cada jugador solo lee y escribe su propia cuenta.
+    match /data/users/{uid}/cuenta {
+      allow read, write: if signed() && request.auth.uid == uid;
+    }
+
+    // Boletas: cualquier jugador registrado crea las suyas; solo el administrador las modifica o borra.
+    match /boletas/{id} {
+      allow read: if signed();
+      allow create: if signed() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if esAdmin();
+    }
+
+    // Reservas de jugadas únicas: se crea sin dueño y luego el jugador la asigna una sola vez.
+    match /reservas/{id} {
+      allow read: if signed();
+      allow create: if signed() && request.resource.data.uid == null;
+      allow update: if signed() && resource.data.uid == null
+        && request.resource.data.uid == request.auth.uid;
+    }
+
+    // Resultados: solo el administrador publica.
+    match /resultados/{id} {
+      allow read: if signed();
+      allow create, update, delete: if esAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
