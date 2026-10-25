@@ -1249,15 +1249,34 @@ $("#listaResultados").innerHTML=htmlResultados();
 
 const FIREBASE_CONFIG={apiKey:"AIzaSyDT22nrwIAUER23i3U6hvI8RYDW5Vp213Q",authDomain:"suerteo-c5a28.firebaseapp.com",projectId:"suerteo-c5a28",storageBucket:"suerteo-c5a28.firebasestorage.app",messagingSenderId:"88053203982",appId:"1:88053203982:web:67e92d3c2d0f1fc752a85f"};
 const ADMIN_EMAIL="campo.fabian1@gmail.com";
+function mostrarLogin(auth){
+  return new Promise(()=>{
+    const d=document.createElement("div");
+    d.id="loginSuerteo";
+    d.style.cssText="position:fixed;inset:0;background:#F2F8F4;display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;font-family:Nunito,system-ui,sans-serif";
+    d.innerHTML='<div style="background:#fff;border-radius:18px;padding:28px 22px;max-width:360px;width:100%;text-align:center;box-shadow:0 8px 30px rgba(3,91,54,.12)">'+
+      '<img src="icon-192.png" alt="" style="width:88px;height:88px;border-radius:20px">'+
+      '<h1 style="color:#035B36;margin:12px 0 4px;font-size:26px">Suerteo</h1>'+
+      '<p style="color:#444;margin:0 0 22px">Tu suerte empieza aquí y ahora</p>'+
+      '<button id="btnGoogleLogin" style="width:100%;padding:14px;border:0;border-radius:12px;background:#035B36;color:#fff;font-size:16px;font-weight:700;cursor:pointer">Continuar con Gmail</button>'+
+      '<p style="color:#777;font-size:12px;margin-top:14px">Usa tu cuenta de Google. Tus jugadas y saldo quedan guardados en tu cuenta.</p></div>';
+    document.body.appendChild(d);
+    document.getElementById("btnGoogleLogin").addEventListener("click",()=>{
+      const p=new firebase.auth.GoogleAuthProvider();
+      p.setCustomParameters({prompt:"select_account"});
+      auth.signInWithRedirect(p);
+    });
+  });
+}
 async function iniciarFirebase(){
   firebase.initializeApp(FIREBASE_CONFIG);
   const fs=firebase.firestore(), auth=firebase.auth();
-  try{await auth.getRedirectResult()}catch(e){}
-  if(location.hash==="#admin"&&!(auth.currentUser&&auth.currentUser.email===ADMIN_EMAIL)){
-    await auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());return null;
-  }
-  const u=auth.currentUser||(await auth.signInAnonymously()).user;
-  const owner=!!(u&&u.email===ADMIN_EMAIL&&u.emailVerified);
+  try{await auth.getRedirectResult()}catch(e){console.error(e)}
+  const u=await new Promise(res=>{const un=auth.onAuthStateChanged(x=>{un();res(x)})});
+  if(!u){mostrarLogin(auth);return null}
+  const owner=!!(u.email===ADMIN_EMAIL&&u.emailVerified);
+  const quitarLogin=()=>{const l=document.getElementById("loginSuerteo");if(l)l.remove()};
+  quitarLogin();
   const db={
     doc:(p)=>{const r=fs.doc(p);return{
       get:()=>r.get(),
@@ -1267,7 +1286,7 @@ async function iniciarFirebase(){
     }},
     collection:(n)=>fs.collection(n)
   };
-  const usuario={id:async()=>u.uid,me:async()=>({name:"Jugador"}),isOwner:()=>owner};
+  const usuario={id:async()=>u.uid,me:async()=>({name:u.displayName||"Jugador",correo:u.email||""}),isOwner:()=>owner};
   const descargas={save:async({filename,data})=>{
     const blob=data instanceof Blob?data:new Blob([data],{type:"text/csv;charset=utf-8"});
     const url=URL.createObjectURL(blob);const a=document.createElement("a");
